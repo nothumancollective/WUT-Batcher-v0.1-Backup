@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.constants import DEFAULT_RUNNER_MODE
-from app.export_specs import dump_export_specs, parse_export_specs
 
 
 def _now_iso() -> str:
@@ -123,7 +122,6 @@ class ProjectConstraints:
     notes: Optional[str] = None
     fixed_params: Dict[str, Any] = field(default_factory=dict)
     limits: Dict[str, Any] = field(default_factory=dict)
-    param_states: List[Dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ProjectConstraints":
@@ -135,9 +133,6 @@ class ProjectConstraints:
             notes=data.get("notes"),
             fixed_params=dict(data.get("fixed_params", {}) or {}),
             limits=dict(data.get("limits", {}) or {}),
-            param_states=[
-                item for item in list(data.get("param_states", []) or []) if isinstance(item, dict)
-            ],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -149,7 +144,6 @@ class ProjectConstraints:
             "notes": self.notes,
             "fixed_params": dict(self.fixed_params),
             "limits": dict(self.limits),
-            "param_states": [dict(item) for item in self.param_states if isinstance(item, dict)],
         }
 
 
@@ -249,7 +243,6 @@ class SimExportSettings:
     freq_end_hz: float = 15000.0
     num_points: int = 16
     exports: Dict[str, ExportOption] = field(default_factory=dict)
-    export_specs: List[Dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SimExportSettings":
@@ -257,13 +250,11 @@ class SimExportSettings:
         for key, value in dict(data.get("exports", {}) or {}).items():
             if isinstance(value, dict):
                 exports[str(key)] = ExportOption.from_dict(value)
-        specs = dump_export_specs(parse_export_specs(data))
         return cls(
             freq_start_hz=float(data.get("freq_start_hz", 500.0)),
             freq_end_hz=float(data.get("freq_end_hz", 15000.0)),
             num_points=int(data.get("num_points", 16)),
             exports=exports,
-            export_specs=specs,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -272,7 +263,6 @@ class SimExportSettings:
             "freq_end_hz": self.freq_end_hz,
             "num_points": self.num_points,
             "exports": {k: v.to_dict() for k, v in self.exports.items()},
-            "export_specs": list(self.export_specs),
         }
 
 
@@ -411,69 +401,3 @@ class DatasetManifest:
 
     def dump(self, path: str | Path) -> None:
         _write_json(_as_path(path), self.to_dict())
-
-
-@dataclass
-class ResolutionIssue:
-    rule_id: str
-    severity: str
-    message: str
-    scope: str = "version"
-    source: str = "resolver"
-    version_index: Optional[int] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {
-            "rule_id": self.rule_id,
-            "severity": self.severity,
-            "message": self.message,
-            "scope": self.scope,
-            "source": self.source,
-        }
-        if self.version_index is not None:
-            payload["version_index"] = self.version_index
-        return payload
-
-
-@dataclass
-class VersionSpec:
-    project_id: str
-    batch_id: str
-    version_id: str
-    sweep_mode: str
-    sequence_index: int
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    variable_parameters: Dict[str, Any] = field(default_factory=dict)
-    unset_parameters: List[str] = field(default_factory=list)
-    sweep_parameters: Dict[str, Any] = field(default_factory=dict)
-    sim_export_settings: Dict[str, Any] = field(default_factory=dict)
-    paths: Dict[str, str] = field(default_factory=dict)
-    status: str = "planned"
-    created_at: str = field(default_factory=_now_iso)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "project_id": self.project_id,
-            "batch_id": self.batch_id,
-            "version_id": self.version_id,
-            "sweep_mode": self.sweep_mode,
-            "sequence_index": self.sequence_index,
-            "parameters": dict(self.parameters),
-            "variable_parameters": dict(self.variable_parameters),
-            "unset_parameters": list(self.unset_parameters),
-            "sweep_parameters": dict(self.sweep_parameters),
-            "sim_export_settings": dict(self.sim_export_settings),
-            "paths": dict(self.paths),
-            "status": self.status,
-            "created_at": self.created_at,
-        }
-
-
-@dataclass
-class ResolveVersionsResult:
-    versions: List[VersionSpec] = field(default_factory=list)
-    issues: List[ResolutionIssue] = field(default_factory=list)
-
-    @property
-    def blocking_issues(self) -> List[ResolutionIssue]:
-        return [issue for issue in self.issues if issue.severity == "fatal"]
