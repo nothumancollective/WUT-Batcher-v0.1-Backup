@@ -86,7 +86,12 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         report_path=Path(args.report_path) if args.report_path else None,
     )
     print(json.dumps(report, indent=2, ensure_ascii=False, default=_json_default))
-    return 0
+    status = ""
+    if isinstance(report, dict):
+        status = str(report.get("overall_status", "") or "")
+    else:
+        status = str(getattr(report, "overall_status", "") or "")
+    return 0 if status.lower() != "fail" else 3
 
 
 def cmd_batch_job_count(args: argparse.Namespace) -> int:
@@ -169,7 +174,12 @@ def cmd_run_pipeline(args: argparse.Namespace) -> int:
         dry_run=args.dry_run,
     )
     print(json.dumps(summary, indent=2, ensure_ascii=False, default=_json_default))
-    return 0
+    run_status = ""
+    if isinstance(summary, dict):
+        run_status = str(summary.get("run_status", "") or "")
+    else:
+        run_status = str(getattr(summary, "run_status", "") or "")
+    return 0 if run_status.lower() not in {"fail", "failed", "error"} else 3
 
 
 def cmd_run_sample(args: argparse.Namespace) -> int:
@@ -1832,6 +1842,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    from app.audit_mode import enable_audit_mode
+
+    enable_audit_mode(entrypoint="app.cli.main")
     parser = build_parser()
     args = parser.parse_args(argv)
     return int(args.func(args))

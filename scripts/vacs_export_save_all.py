@@ -2295,6 +2295,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    from app.audit_mode import enable_audit_mode
+
+    enable_audit_mode(entrypoint="scripts.vacs_export_save_all.main")
     args = build_parser().parse_args()
     result = run_once(args)
     print(json.dumps(result, indent=2, ensure_ascii=False))

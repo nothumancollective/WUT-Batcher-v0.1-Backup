@@ -26,6 +26,7 @@ from app.constants import (
     ATH_PREVIEW_CFG_DIR,
     ATH_PREVIEW_CFG_NAME,
     ATH_PREVIEW_EXPORT_ROOT,
+    DEFAULT_RUNNER_MODE,
     PREVIEW_CACHE_APPDIR,
     PREVIEW_CACHE_KEEP_FILES,
     PREVIEW_CACHE_MAX_AGE_DAYS,
@@ -1315,13 +1316,43 @@ class OrchestratorService:
         sweeps: Dict[str, Dict[str, Any]],
         sweep_mode: str,
     ) -> Dict[str, Any]:
-        project = self.repo.load_project(project_id)
-        return self.compatibility.evaluate_batch_definition(
-            project.constraints,
-            selected_params=selected_params,
-            sweeps=sweeps,
-            sweep_mode=sweep_mode,
-        )
+        try:
+            project = self.repo.load_project(project_id)
+            return self.compatibility.evaluate_batch_definition(
+                project.constraints,
+                selected_params=selected_params,
+                sweeps=sweeps,
+                sweep_mode=sweep_mode,
+            )
+        except FileNotFoundError as exc:
+            fallback_state = self.compatibility.evaluate_batch_definition(
+                {
+                    "project_id": str(project_id),
+                    "runner_mode": DEFAULT_RUNNER_MODE,
+                    "fixed_params": {},
+                    "limits": {},
+                    "param_states": [],
+                },
+                selected_params=selected_params,
+                sweeps=sweeps,
+                sweep_mode=sweep_mode,
+            )
+            issues = list(fallback_state.get("issues", []) or [])
+            issues.append(
+                {
+                    "rule_id": "project_missing",
+                    "severity": "fatal",
+                    "category": "project",
+                    "message": str(exc),
+                    "source": "storage",
+                    "scope": "batch",
+                    "evidence_type": "runtime",
+                }
+            )
+            fallback_state["issues"] = issues
+            fallback_state["issue_count"] = len(issues)
+            fallback_state["project_available"] = False
+            return fallback_state
 
     def evaluate_batch_default_policy(
         self,

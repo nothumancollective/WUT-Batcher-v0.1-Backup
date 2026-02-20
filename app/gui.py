@@ -3757,4 +3757,7 @@ def launch_gui() -> int:
 
 
 def main() -> int:
+    from app.audit_mode import enable_audit_mode
+
+    enable_audit_mode(entrypoint="app.gui.main")
     return int(launch_gui())

@@ -919,6 +919,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    from app.audit_mode import enable_audit_mode
+
+    enable_audit_mode(entrypoint="scripts.vacs_interim_reimport.main")
     parser = build_parser()
     args = parser.parse_args()
     result = run_interim(args)

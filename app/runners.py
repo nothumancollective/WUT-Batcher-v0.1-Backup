@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import re
+import os
 import subprocess
 from typing import Iterable, List, Optional, Sequence
 
@@ -128,15 +129,18 @@ class _SubprocessRunner:
         for attempt in range(1, effective_retries + 1):
             attempt_started = _now_iso()
             try:
-                proc = subprocess.run(
+                popen_kwargs = {
+                    "cwd": str(workdir) if workdir else None,
+                    "timeout": effective_timeout,
+                    "capture_output": True,
+                    "text": True,
+                    "encoding": "utf-8",
+                    "errors": "replace",
+                    "check": False,
+                }
+                proc = _run_with_process_tree_timeout(
                     command,
-                    cwd=str(workdir) if workdir else None,
-                    timeout=effective_timeout,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    check=False,
+                    **popen_kwargs,
                 )
                 last_exit_code = int(proc.returncode)
                 stdout_log.write_text(
@@ -190,6 +194,87 @@ class _SubprocessRunner:
             stderr_log=str(stderr_log),
             summary_log=str(summary_log),
         )
+
+
+def _run_with_process_tree_timeout(
+    command: Sequence[str],
+    *,
+    cwd: str | None,
+    timeout: int,
+    capture_output: bool,
+    text: bool,
+    encoding: str,
+    errors: str,
+    check: bool,
+) -> subprocess.CompletedProcess[str]:
+    if not capture_output:
+        raise ValueError("capture_output must be True for runner logging")
+    popen_kwargs = {
+        "cwd": cwd,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": text,
+        "encoding": encoding,
+        "errors": errors,
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    proc = subprocess.Popen(list(command), **popen_kwargs)
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        _terminate_process_tree(proc.pid)
+        timeout_stdout = ""
+        timeout_stderr = ""
+        try:
+            timeout_stdout, timeout_stderr = proc.communicate(timeout=5)
+        except Exception:
+            timeout_stdout = str(exc.stdout or "")
+            timeout_stderr = str(exc.stderr or "")
+        raise subprocess.TimeoutExpired(
+            cmd=list(command),
+            timeout=timeout,
+            output=timeout_stdout,
+            stderr=timeout_stderr,
+        )
+
+    completed = subprocess.CompletedProcess(
+        args=list(command),
+        returncode=int(proc.returncode or 0),
+        stdout=str(stdout or ""),
+        stderr=str(stderr or ""),
+    )
+    if check and completed.returncode != 0:
+        raise subprocess.CalledProcessError(
+            returncode=completed.returncode,
+            cmd=completed.args,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
+    return completed
+
+
+def _terminate_process_tree(pid: int) -> None:
+    if int(pid) <= 0:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(int(pid)), "/T", "/F"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return
+    try:
+        os.killpg(int(pid), 9)
+    except Exception:
+        try:
+            os.kill(int(pid), 9)
+        except Exception:
+            pass
 
 
 class AthRunner(_SubprocessRunner):

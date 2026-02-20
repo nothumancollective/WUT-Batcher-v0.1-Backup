@@ -178,6 +178,27 @@ class ServiceExportTests(unittest.TestCase):
             summary = service.run_batch(project.project_id, batch_summary.batch_id, continue_on_error=True)
             self.assertTrue(summary.dry_run)
 
+    def test_evaluate_batch_definition_missing_project_returns_structured_issue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            library_root = Path(tmp_dir) / "projects"
+            settings_path = Path(tmp_dir) / "settings.json"
+            store = SettingsStore(settings_path)
+            store.save(UserSettings(library_root=str(library_root)))
+            service = OrchestratorService(settings_store=store)
+            state = service.evaluate_batch_definition(
+                project_id="P404",
+                selected_params={"Throat.Diameter": 30.0},
+                sweeps={},
+                sweep_mode="single",
+            )
+            self.assertFalse(bool(state.get("project_available", True)))
+            issues = [item for item in list(state.get("issues", []) or []) if isinstance(item, dict)]
+            self.assertTrue(issues)
+            project_missing = [item for item in issues if str(item.get("rule_id")) == "project_missing"]
+            self.assertTrue(project_missing)
+            self.assertEqual(str(project_missing[0].get("severity", "")), "fatal")
+            self.assertIn("Project not found", str(project_missing[0].get("message", "")))
+
     def test_create_batch_ignores_runner_locked_user_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             library_root = Path(tmp_dir) / "projects"

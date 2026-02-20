@@ -113,6 +113,9 @@ def launch_preview() -> int:
 
 
 def main() -> int:
+    from app.audit_mode import enable_audit_mode
+
+    enable_audit_mode(entrypoint="ui.theme_preview.main")
     return launch_preview()
 
 
