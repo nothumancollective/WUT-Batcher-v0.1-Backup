@@ -458,7 +458,8 @@ class BatchPageUiTests(unittest.TestCase):
         self.assertIsNotNone(editor)
         assert editor is not None
         self.assertEqual(str(editor.property("fieldState")), "warn")
-        self.assertIn("Warnings present", page.action_status_pill.text())
+        self.assertEqual(str(page.summary_issue_hint.property("severity")), "warn")
+        self.assertIn("Length outside safe range.", page.summary_issue_hint.text())
 
     def test_warning_summary_sorts_messages_and_sets_hover_tooltip(self) -> None:
         page = BatchPage()
