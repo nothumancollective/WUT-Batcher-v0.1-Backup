@@ -3,7 +3,7 @@
 
 Behavior:
 - discovers tests via unittest loader (no unbounded discover run command)
-- filters by default skip tokens (UI/Qt/GUI/preview/stl/gmsh)
+- filters by default skip tokens (UI/Qt/GUI/preview/stl/gmsh), with opt-in include overrides
 - runs tests in chunks with hard timeout
 - bisects timed-out chunks to isolate hanging tests
 - writes audit artifacts:
@@ -30,6 +30,12 @@ from typing import Iterable, Iterator
 
 
 DEFAULT_SKIP_TOKENS = ["ui", "qt", "gui", "preview", "stl", "gmsh"]
+INCLUDE_CHOICES = ("ui", "preview", "external")
+INCLUDE_TOKEN_OVERRIDES: dict[str, set[str]] = {
+    "ui": {"ui", "qt", "gui"},
+    "preview": {"preview", "stl"},
+    "external": {"gmsh"},
+}
 
 
 @dataclass
@@ -86,6 +92,24 @@ def classify_skip(test_id: str, skip_tokens: list[str], skip_regex: str | None) 
     if skip_regex and re.search(skip_regex, test_id, flags=re.IGNORECASE):
         return f"regex:{skip_regex}"
     return None
+
+
+def resolve_include_modes(include_values: list[str]) -> list[str]:
+    # Preserve CLI order while removing duplicates.
+    return list(dict.fromkeys(include_values))
+
+
+def resolve_effective_skip_tokens(skip_tokens: list[str], include_modes: list[str]) -> list[str]:
+    excluded = {token.lower() for token in skip_tokens}
+    for mode in include_modes:
+        excluded -= INCLUDE_TOKEN_OVERRIDES.get(mode, set())
+    return [token for token in skip_tokens if token.lower() in excluded]
+
+
+def resolve_effective_timeout_s(timeout_s: float, include_modes: list[str], include_strict_timeout_s: float) -> float:
+    if any(mode in {"ui", "preview"} for mode in include_modes):
+        return min(timeout_s, include_strict_timeout_s)
+    return timeout_s
 
 
 def parse_unittest_output(output: str) -> dict[str, object]:
@@ -296,6 +320,9 @@ def render_summary_file(
     discover_errors: list[str],
     results: list[ChunkResult],
     args: argparse.Namespace,
+    include_modes: list[str],
+    effective_skip_tokens: list[str],
+    effective_timeout_s: float,
 ) -> None:
     timeouts = [r for r in results if r.timeout]
     failed_chunks = [r for r in results if not r.timeout and (r.returncode or 0) != 0]
@@ -308,11 +335,22 @@ def render_summary_file(
     lines.append("# Bounded Test Summary")
     lines.append("")
     lines.append("## Configuration")
-    lines.append(f"- command: `python tools/audit/run_tests_bounded.py --chunk-size {args.chunk_size} --timeout-s {args.timeout_s}`")
+    include_arg = " ".join(f"--include {mode}" for mode in include_modes)
+    command_suffix = f" {include_arg}" if include_arg else ""
+    lines.append(
+        f"- command: `python tools/audit/run_tests_bounded.py --chunk-size {args.chunk_size} --timeout-s {args.timeout_s}{command_suffix}`"
+    )
     lines.append(f"- started_utc: {dt.datetime.now(dt.UTC).isoformat()}")
     lines.append(f"- chunk_size: {args.chunk_size}")
-    lines.append(f"- timeout_s: {args.timeout_s}")
-    lines.append(f"- default_skip_tokens: `{', '.join(args.skip_token)}`")
+    lines.append(f"- configured_timeout_s: {args.timeout_s}")
+    lines.append(f"- effective_timeout_s: {effective_timeout_s}")
+    lines.append(
+        f"- include_modes: `{', '.join(include_modes)}`"
+        if include_modes
+        else "- include_modes: `none`"
+    )
+    lines.append(f"- configured_skip_tokens: `{', '.join(args.skip_token)}`")
+    lines.append(f"- effective_skip_tokens: `{', '.join(effective_skip_tokens)}`")
     lines.append("")
     lines.append("## Discovery")
     lines.append(f"- discovered_total: {discovered_count}")
@@ -404,6 +442,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top-level-dir", default=None)
     parser.add_argument("--chunk-size", type=int, default=10)
     parser.add_argument("--timeout-s", type=float, default=120.0)
+    parser.add_argument(
+        "--include",
+        action="append",
+        default=[],
+        choices=list(INCLUDE_CHOICES),
+        help="Include additional test families that are skipped by default.",
+    )
+    parser.add_argument(
+        "--include-strict-timeout-s",
+        type=float,
+        default=60.0,
+        help="When include ui/preview is used, cap per-chunk timeout to this value.",
+    )
     parser.add_argument("--audit-dir", default="audit")
     parser.add_argument("--skip-token", action="append", default=list(DEFAULT_SKIP_TOKENS))
     parser.add_argument("--skip-regex", default=None)
@@ -418,6 +469,8 @@ def main() -> int:
         raise SystemExit("--chunk-size must be > 0")
     if args.timeout_s <= 0:
         raise SystemExit("--timeout-s must be > 0")
+    if args.include_strict_timeout_s <= 0:
+        raise SystemExit("--include-strict-timeout-s must be > 0")
 
     repo_root = Path(__file__).resolve().parents[2]
     audit_dir = (repo_root / args.audit_dir).resolve()
@@ -439,11 +492,18 @@ def main() -> int:
         pattern=args.pattern,
         top_level_dir=top_level_dir,
     )
+    include_modes = resolve_include_modes(args.include)
+    effective_skip_tokens = resolve_effective_skip_tokens(args.skip_token, include_modes)
+    effective_timeout_s = resolve_effective_timeout_s(
+        timeout_s=args.timeout_s,
+        include_modes=include_modes,
+        include_strict_timeout_s=args.include_strict_timeout_s,
+    )
 
     selected: list[str] = []
     skipped: list[tuple[str, str]] = []
     for test_id in discovered:
-        reason = classify_skip(test_id, args.skip_token, args.skip_regex)
+        reason = classify_skip(test_id, effective_skip_tokens, args.skip_regex)
         if reason:
             skipped.append((test_id, reason))
         else:
@@ -463,7 +523,7 @@ def main() -> int:
 
     runner = BoundedRunner(
         python_exe=args.python_exe,
-        timeout_s=args.timeout_s,
+        timeout_s=effective_timeout_s,
         cwd=repo_root,
         logs_dir=logs_dir,
     )
@@ -480,6 +540,9 @@ def main() -> int:
         discover_errors=discover_errors,
         results=runner.results,
         args=args,
+        include_modes=include_modes,
+        effective_skip_tokens=effective_skip_tokens,
+        effective_timeout_s=effective_timeout_s,
     )
 
     flaky_out = audit_dir / "flaky_or_hanging_tests.md"
@@ -495,7 +558,11 @@ def main() -> int:
                     "pattern": args.pattern,
                     "chunk_size": args.chunk_size,
                     "timeout_s": args.timeout_s,
-                    "skip_tokens": args.skip_token,
+                    "include_strict_timeout_s": args.include_strict_timeout_s,
+                    "effective_timeout_s": effective_timeout_s,
+                    "include_modes": include_modes,
+                    "skip_tokens_configured": args.skip_token,
+                    "skip_tokens_effective": effective_skip_tokens,
                     "skip_regex": args.skip_regex,
                     "max_tests": args.max_tests,
                     "python_exe": args.python_exe,
@@ -533,6 +600,8 @@ def main() -> int:
     print(f"Discovered: {len(discovered)}")
     print(f"Selected: {len(selected)}")
     print(f"Skipped by default filter: {len(skipped)}")
+    print(f"Include modes: {', '.join(include_modes) if include_modes else 'none'}")
+    print(f"Effective timeout_s: {effective_timeout_s}")
     print(f"Subprocess runs: {len(runner.results)}")
     print(f"Artifacts:")
     print(f"  - {discovered_out.as_posix()}")
