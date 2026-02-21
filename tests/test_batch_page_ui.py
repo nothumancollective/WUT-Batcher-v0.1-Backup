@@ -192,8 +192,8 @@ class BatchPageUiTests(unittest.TestCase):
             sweeps=dict(payload.get("sweeps", {}) or {}),
         )
         page.apply_compatibility(state_b)
-        self.assertFalse(row.helper_label.isHidden())
-        self.assertTrue(bool(row.helper_label.text().strip()))
+        # For controller groups, helper text is suppressed; the disclosure hint is carried on segment buttons.
+        self.assertTrue(row.helper_label.isHidden())
 
         value_widget = row.base_editor.value_widget()  # type: ignore[attr-defined]
         segment = getattr(value_widget, "segment", None)
