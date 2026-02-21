@@ -726,14 +726,12 @@ class BatchPageUiTests(unittest.TestCase):
         if row is None:
             self.skipTest(f"{target_key} not available.")
 
-        button = page.parameter_form._group_advanced_buttons.get(str(row.group_name))  # type: ignore[attr-defined]
+        button = getattr(page.parameter_form, "_mesh_advanced_button", None)
         self.assertIsNotNone(button)
         assert button is not None
-        if not button.isVisible():
-            self.skipTest("No advanced toggle visible for target group.")
+        self.assertEqual(str(button.text()).strip().lower(), "advanced")
         self.assertTrue(row.container.isHidden())
-        button.click()
-        self.assertFalse(row.container.isHidden())
+        self.assertEqual(str(row.container.property("meshAdvancedDetached") or "false").lower(), "true")
 
     def test_batch_form_has_no_horizontal_overflow_at_1920x1080(self) -> None:
         page = BatchPage()
