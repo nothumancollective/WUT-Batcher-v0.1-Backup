@@ -314,9 +314,8 @@ class BatchPageUiTests(unittest.TestCase):
             if label.objectName() == "IssuesPanelGroupTitle"
             and str(label.text()).strip() in {"Superellipse", "Superformula"}
         ]
-        self.assertTrue(headers, "Expected GCurve subgroup headers to exist.")
-        for header in headers:
-            self.assertTrue(header.isHidden())
+        # Compact batch layout omits GCurve subgroup titles; mode chips provide the context instead.
+        self.assertFalse(headers)
 
     def test_sweep_button_locks_base_editor_when_active(self) -> None:
         page = BatchPage()
