@@ -88,6 +88,41 @@ class CliExitCodeTests(unittest.TestCase):
                                 exit_code = cli.cmd_run_pipeline(args)
         self.assertEqual(exit_code, 0)
 
+    def test_projectpage_ath_experiment_returns_nonzero_on_ath_error_status(self) -> None:
+        args = argparse.Namespace(
+            aggregate_run_groups=None,
+            cases=1,
+            seed=20260220,
+            run_group="test_group",
+            ath_exe="C:\\Tools\\ATH\\ath.exe",
+            template_cfg="runner_test_cases/templates/smoke_fast_min.cfg",
+            cfg_dir="cleanup/runtime/test_cfg",
+            export_root="cleanup/runtime/test_export",
+            reports_root="cleanup/runtime/test_reports",
+            cleanup_files=False,
+            max_dim_mm=2000.0,
+            hard_cap_mm=5000.0,
+            priors_path=None,
+            commit_every=100,
+            preclean_files=False,
+            cleanup_cases="never",
+            cleanup_log="never",
+            backfill_legacy_null_run_groups=False,
+            write_history_snapshots=False,
+        )
+        with patch("app.cli.SettingsStore.load", return_value=object()):
+            with patch(
+                "app.projectpage_ath_experiment.run_projectpage_ath_experiment",
+                return_value={
+                    "status_counts": {"ok": 0, "ath_error": 1, "pipeline_error": 0, "skipped": 0},
+                    "run_status_counts": {"ath_error": 1},
+                    "reports_preview": [{"status": "ath_error", "ath_result": {"exit_code": -1, "timed_out": True}}],
+                },
+            ):
+                with patch("builtins.print"):
+                    exit_code = cli.cmd_projectpage_ath_experiment(args)
+        self.assertEqual(exit_code, 3)
+
 
 if __name__ == "__main__":
     unittest.main()
