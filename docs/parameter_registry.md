@@ -16,5 +16,5 @@ Template-Familien, ohne harte Kopplung an ATH-Templates.
 6. `ath_mapping` ist ein Platzhalter, wie spaeter Parameter in ATH-Configs gemappt werden.
 
 ## Erweiterung
-- Neue Parameter werden als `ParameterDef` in `app/parameter_registry.py` hinzugefuegt.
+- Legacy-Parameterdefinitionen liegen in `tools/legacy/parameter_registry.py` (non-shipping quarantine).
 - Bestehende Parameter koennen ohne GUI-Aenderungen erweitert werden (Registry ist die Quelle).

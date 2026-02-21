@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.ui_risk_layer import UiRiskLayer
+from tools.legacy.ui_risk_layer import UiRiskLayer
 
 
 def _write_json(path: Path, payload: dict) -> None:

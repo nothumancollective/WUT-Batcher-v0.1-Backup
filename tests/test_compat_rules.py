@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.compat_rules import dump_compatibility_rules, load_compatibility_rules
+from tools.legacy.compat_rules import dump_compatibility_rules, load_compatibility_rules
 
 
 class CompatRulesTests(unittest.TestCase):

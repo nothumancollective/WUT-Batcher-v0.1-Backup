@@ -6,7 +6,7 @@ Stand: 2026-02-10
 
 - [x] M0 Foundations (Contracts/RunnerMode/Migration)
   - Commit: `cce4765`
-  - Kernpfade: `app/models.py`, `app/cli.py`, `app/storage_migrations.py`, `schemas/constraints.schema.json`
+  - Kernpfade: `app/models.py`, `app/cli.py`, `tools/legacy/storage_migrations.py`, `schemas/constraints.schema.json`
 - [x] M1 Wissensartefakte (Katalog/Ruleset/Runner-Restrictions + Loader)
   - Commit: `7f1cab5`
   - Kernpfade: `app/knowledge/ath/catalog.v1.json`, `app/knowledge/ath/ruleset.v1.json`, `app/ath_knowledge.py`

@@ -14,7 +14,7 @@ Er nutzt `AppConfig.projects_root` und erstellt alle benoetigten Ordner bei Beda
 - `dataset_dir` -> `project_dir/dataset`
 
 ## Aenderungshinweis (2026-02-10)
-Der Path Resolver folgt dem aktuellen Code-Stand in `app/path_resolver.py`.
+Der legacy Path Resolver folgt dem Stand in `tools/legacy/path_resolver.py` (quarantined, non-shipping).
 
 Der Resolver verwendet wieder Runner-kompatible Ordnernamen (`Config`, `ATH Export`, `Resultate`, `Logs`),
 damit Batch-Erzeugung, Run-Orchestrierung und Dataset-Import dieselbe Struktur nutzen.
@@ -35,7 +35,7 @@ ProjectsRoot/
 ## Verwendung (Python)
 ```
 from app.models import AppConfig
-from app.path_resolver import resolve_paths
+from tools.legacy.path_resolver import resolve_paths
 
 config = AppConfig(app_name="Batch-Software", projects_root="Documents/WUT-Batches/Projects")
 paths = resolve_paths(config, project_id="P001", batch_id="B001")
