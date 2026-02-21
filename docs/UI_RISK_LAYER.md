@@ -4,7 +4,7 @@
 The UI Risk Layer adds experiment-backed hints on top of the normative compatibility system.
 
 - Normative rules: `app/knowledge/ath/ruleset.v1.json` via `CompatibilityService` (can be fatal and block flows where defined).
-- UI Risk Layer: `app/ui_risk_layer.py` (visual-only warn/fatal outlines + tooltip guidance, no new hard blocking).
+- UI Risk Layer (legacy quarantine): `tools/legacy/ui_risk_layer.py` (visual-only warn/fatal outlines + tooltip guidance, no new hard blocking).
 
 ## Data Sources
 - `reports/ath_experiments/range_suggestions.v1.2.json`

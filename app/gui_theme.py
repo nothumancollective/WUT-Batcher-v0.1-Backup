@@ -1,11 +1,7 @@
-"""Backward-compatible wrappers around the new ui.theme modules."""
+"""Legacy compatibility shim.
 
-from __future__ import annotations
+Quarantined implementation lives at `tools/legacy/gui_theme.py`.
+"""
 
-from ui.theme import build_palette, build_stylesheet
-from ui.theme_tokens import DEFAULT_THEME, ThemeTokens
-
-TOKENS = DEFAULT_THEME.colors
-
-__all__ = ["TOKENS", "ThemeTokens", "build_palette", "build_stylesheet"]
+from tools.legacy.gui_theme import *  # noqa: F401,F403
 

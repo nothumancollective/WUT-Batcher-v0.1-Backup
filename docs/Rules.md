@@ -55,5 +55,5 @@ Conditions are evaluated by a restricted AST evaluator.
 - Source artifacts:
   - `reports/ath_experiments/range_suggestions.v1.2.json`
   - `reports/ath_experiments/compat_rule_candidates.v1.json`
-- Runtime evaluator: `app/ui_risk_layer.py`.
+- Runtime evaluator (legacy quarantine): `tools/legacy/ui_risk_layer.py`.
 - These hints provide `warn|fatal` visuals on Project form fields and tooltip guidance, but do not add new hard flow blocks.
