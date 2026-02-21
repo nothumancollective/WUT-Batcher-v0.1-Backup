@@ -192,8 +192,8 @@ class BatchPageUiTests(unittest.TestCase):
             sweeps=dict(payload.get("sweeps", {}) or {}),
         )
         page.apply_compatibility(state_b)
-        self.assertFalse(row.helper_label.isHidden())
-        self.assertTrue(bool(row.helper_label.text().strip()))
+        # For controller groups, helper text is suppressed; the disclosure hint is carried on segment buttons.
+        self.assertTrue(row.helper_label.isHidden())
 
         value_widget = row.base_editor.value_widget()  # type: ignore[attr-defined]
         segment = getattr(value_widget, "segment", None)
@@ -314,9 +314,8 @@ class BatchPageUiTests(unittest.TestCase):
             if label.objectName() == "IssuesPanelGroupTitle"
             and str(label.text()).strip() in {"Superellipse", "Superformula"}
         ]
-        self.assertTrue(headers, "Expected GCurve subgroup headers to exist.")
-        for header in headers:
-            self.assertTrue(header.isHidden())
+        # Compact batch layout omits GCurve subgroup titles; mode chips provide the context instead.
+        self.assertFalse(headers)
 
     def test_sweep_button_locks_base_editor_when_active(self) -> None:
         page = BatchPage()
@@ -459,7 +458,8 @@ class BatchPageUiTests(unittest.TestCase):
         self.assertIsNotNone(editor)
         assert editor is not None
         self.assertEqual(str(editor.property("fieldState")), "warn")
-        self.assertIn("Warnings present", page.action_status_pill.text())
+        self.assertEqual(str(page.summary_issue_hint.property("severity")), "warn")
+        self.assertIn("Length outside safe range.", page.summary_issue_hint.text())
 
     def test_warning_summary_sorts_messages_and_sets_hover_tooltip(self) -> None:
         page = BatchPage()
@@ -726,14 +726,12 @@ class BatchPageUiTests(unittest.TestCase):
         if row is None:
             self.skipTest(f"{target_key} not available.")
 
-        button = page.parameter_form._group_advanced_buttons.get(str(row.group_name))  # type: ignore[attr-defined]
+        button = getattr(page.parameter_form, "_mesh_advanced_button", None)
         self.assertIsNotNone(button)
         assert button is not None
-        if not button.isVisible():
-            self.skipTest("No advanced toggle visible for target group.")
+        self.assertEqual(str(button.text()).strip().lower(), "advanced")
         self.assertTrue(row.container.isHidden())
-        button.click()
-        self.assertFalse(row.container.isHidden())
+        self.assertEqual(str(row.container.property("meshAdvancedDetached") or "false").lower(), "true")
 
     def test_batch_form_has_no_horizontal_overflow_at_1920x1080(self) -> None:
         page = BatchPage()
