@@ -30,6 +30,7 @@ from typing import Iterable, Iterator
 
 
 DEFAULT_SKIP_TOKENS = ["ui", "qt", "gui", "preview", "stl", "gmsh"]
+SUMMARY_FAILING_TESTS_TOP_N = 20
 INCLUDE_CHOICES = ("ui", "preview", "external")
 INCLUDE_TOKEN_OVERRIDES: dict[str, set[str]] = {
     "ui": {"ui", "qt", "gui"},
@@ -166,6 +167,31 @@ def parse_unittest_output(output: str) -> dict[str, object]:
         "failed_test_ids": failed_test_ids,
         "error_test_ids": error_test_ids,
     }
+
+
+def collect_failure_error_stats(
+    results: list[ChunkResult],
+) -> tuple[int, int, list[str], list[str], list[str]]:
+    observed_failures_total = sum(int(item.failures or 0) for item in results)
+    observed_errors_total = sum(int(item.errors or 0) for item in results)
+    failing_test_ids = sorted(set(sum((item.failed_test_ids for item in results), [])))
+    error_test_ids = sorted(set(sum((item.error_test_ids for item in results), [])))
+    merged: list[str] = []
+    seen: set[str] = set()
+    for test_id in [*failing_test_ids, *error_test_ids]:
+        token = str(test_id)
+        if token in seen:
+            continue
+        seen.add(token)
+        merged.append(token)
+    top_failing_names = merged[:SUMMARY_FAILING_TESTS_TOP_N]
+    return (
+        observed_failures_total,
+        observed_errors_total,
+        failing_test_ids,
+        error_test_ids,
+        top_failing_names,
+    )
 
 
 def write_chunk_log(log_dir: Path, run_id: int, label: str, output: str) -> str:
@@ -329,7 +355,13 @@ def render_summary_file(
     passed_chunks = [r for r in results if not r.timeout and (r.returncode or 0) == 0]
     total_duration = sum(r.duration_s for r in results)
     ran_total = sum(r.ran or 0 for r in results)
-    failing_tests = sorted({*sum((r.failed_test_ids for r in results), []), *sum((r.error_test_ids for r in results), [])})
+    (
+        observed_failures_total,
+        observed_errors_total,
+        failing_test_ids,
+        error_test_ids,
+        top_failing_names,
+    ) = collect_failure_error_stats(results)
 
     lines: list[str] = []
     lines.append("# Bounded Test Summary")
@@ -365,13 +397,19 @@ def render_summary_file(
     lines.append(f"- timeout_runs: {len(timeouts)}")
     lines.append(f"- observed_ran_total_across_runs: {ran_total}")
     lines.append(f"- accumulated_duration_s: {total_duration:.2f}")
+    lines.append(f"- observed_failures_total: {observed_failures_total}")
+    lines.append(f"- observed_errors_total: {observed_errors_total}")
     lines.append("")
-    lines.append("## Failing Tests (Observed)")
-    if failing_tests:
-        for test_id in failing_tests:
+    lines.append(f"## Failing Test Names (Top {SUMMARY_FAILING_TESTS_TOP_N})")
+    if top_failing_names:
+        for test_id in top_failing_names:
             lines.append(f"- `{test_id}`")
     else:
         lines.append("- none")
+    lines.append("")
+    lines.append("## Failing/Errored Breakdown")
+    lines.append(f"- failed_test_names: {len(failing_test_ids)}")
+    lines.append(f"- error_test_names: {len(error_test_ids)}")
     lines.append("")
     lines.append("## Timeout Runs")
     if timeouts:
@@ -531,6 +569,14 @@ def main() -> int:
     for chunk in chunked(selected, args.chunk_size):
         runner.run_chunk_with_bisect(chunk, depth=0, kind="chunk")
 
+    (
+        observed_failures_total,
+        observed_errors_total,
+        _failing_test_ids,
+        _error_test_ids,
+        _top_failing_names,
+    ) = collect_failure_error_stats(runner.results)
+
     summary_out = audit_dir / "tests_summary.md"
     render_summary_file(
         out_path=summary_out,
@@ -571,6 +617,8 @@ def main() -> int:
                 "selected_total": len(selected),
                 "skipped_total": len(skipped),
                 "discover_errors": discover_errors,
+                "observed_failures_total": observed_failures_total,
+                "observed_errors_total": observed_errors_total,
                 "results": [
                     {
                         "run_id": r.run_id,
@@ -603,11 +651,14 @@ def main() -> int:
     print(f"Include modes: {', '.join(include_modes) if include_modes else 'none'}")
     print(f"Effective timeout_s: {effective_timeout_s}")
     print(f"Subprocess runs: {len(runner.results)}")
+    print(f"Observed failures/errors: {observed_failures_total}/{observed_errors_total}")
     print(f"Artifacts:")
     print(f"  - {discovered_out.as_posix()}")
     print(f"  - {summary_out.as_posix()}")
     print(f"  - {flaky_out.as_posix()}")
     print(f"  - {raw_out.as_posix()}")
+    if observed_failures_total > 0 or observed_errors_total > 0:
+        return 1
     return 0
 
 
