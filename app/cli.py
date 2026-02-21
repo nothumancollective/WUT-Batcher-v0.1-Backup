@@ -36,6 +36,40 @@ def _is_executable_path(path: Optional[str]) -> bool:
     return candidate.exists() and candidate.is_file() and os.access(candidate, os.X_OK)
 
 
+def _ath_experiment_has_failures(summary: Mapping[str, Any]) -> bool:
+    status_counts = dict(summary.get("status_counts", {}) or {})
+    if int(status_counts.get("ath_error", 0) or 0) > 0:
+        return True
+    if int(status_counts.get("pipeline_error", 0) or 0) > 0:
+        return True
+
+    run_status_counts = dict(summary.get("run_status_counts", {}) or {})
+    for key, raw_count in run_status_counts.items():
+        token = str(key or "").strip().lower()
+        if token in {"ath_error", "pipeline_error", "error", "failed", "fail"} and int(raw_count or 0) > 0:
+            return True
+
+    for row in list(summary.get("reports_preview", []) or []):
+        if not isinstance(row, Mapping):
+            continue
+        row_status = str(row.get("status", "") or "").strip().lower()
+        if row_status in {"ath_error", "pipeline_error", "error", "failed", "fail"}:
+            return True
+        ath_result = row.get("ath_result")
+        if not isinstance(ath_result, Mapping):
+            continue
+        exit_code_raw = ath_result.get("exit_code")
+        if exit_code_raw is not None:
+            try:
+                if int(exit_code_raw) != 0:
+                    return True
+            except Exception:
+                pass
+        if bool(ath_result.get("timed_out", False)):
+            return True
+    return False
+
+
 def _status_rows_for_versions(db_path: Path, version_ids: list[str]) -> list[tuple[str, str]]:
     if not version_ids:
         return []
@@ -418,8 +452,7 @@ def cmd_projectpage_ath_experiment(args: argparse.Namespace) -> int:
         write_history_snapshots=bool(args.write_history_snapshots),
     )
     print(json.dumps(summary, indent=2, ensure_ascii=False, default=_json_default))
-    pipeline_errors = int(summary.get("status_counts", {}).get("pipeline_error", 0))
-    return 0 if pipeline_errors == 0 else 3
+    return 3 if _ath_experiment_has_failures(summary) else 0
 
 
 def cmd_ath_experiments_backfill_subkeys(args: argparse.Namespace) -> int:
